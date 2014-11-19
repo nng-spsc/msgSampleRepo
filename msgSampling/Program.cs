@@ -6,6 +6,8 @@ using System.Text;
 using System.Configuration;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Linq;
+using Amazon.CloudTrail;
 
 namespace countBox
 {       
@@ -40,17 +42,86 @@ namespace countBox
             string gxsInstanceRmv = @".*\t*\<Day\>(\d+).*\s*\t*\<Hour\>(\d+).*\s*\t*\<Minute\>(\d+).*\s*\t*\<Second\>(\d+).*\s*\t*\<SubSecond\>(\d+).*";
             string gxsRcvTmRmv = @".*\t*\<ReceivedTime\>(.*T\d+:\d+:\d+)\<.*";
             string gxsMsgIdRmv = @".*\s*\t*\<MessageID\>(.*)\<.*";
-
+            string gxsCreateTmRmv = @".*\t*\<CreationDateTime\>(\d+-\d+-\d+T\d+:\d+:\d+Z).*";
+            string ZzUnh96ARmv = @".+?:ZZ\+(\d+:\d+\+)(\d+).*'UNH\+\d+\+.+?'UNT\+\d+\+.*'UNZ\+\d+\+(\2).*";
+            string gxsCreTmDateRmv = @".*\t*\<CREDAT\>(\d+)\</CREDAT\>\r\n\t*\<CRETIM\>(\d+).*";
+            string Edi40CreTmRmv = @"EDI_DC40.*GIS\s*(\d+).*";
+            string EdiE2kTmRmv = @".*\nE2EDK02.*\s*2014(\d+)\s*\n.*";
+            string Edi78NumRmv = @"^78(\d+)x.*,.*";
+            string TmUnhNUntRmv = @".+?'UNH\+(\d+)\+.*'UNT\+\d+\+(\1).*";
+            string Edi40P93TmRmv = @"EDI_DC40.*P93.*4\s*2014(\d+).*";
+            string OGCOVTmRmv = @"010GCOV\s*.*2014(\d+)\s*000.*\n.*";
+            string CommaTmRmv = @",,(\d+)/\d+/\d+,(\d+),.*";
+            string Unoc14CtrlRmv = @".*\+UNOC.*:ZZZ\+14(\d+:\d+)\+(\d+)\+.*'UNH\+.*'UNZ\+\d+\+(\2)";
+            string HnOrdRsp = @".*UNH.*ORDRSP.*'BGM\+\d+\+(\d+)\+4'DTM\+.*QTY\+83:[1-9].*";
+ 
+            //List<int> grps = new List<int> { 1,2,3,4,5 };
+            //rmvControlVariance(Unoc14CtrlRmv, grps);
+            //enumDifferences();
+            //getFailedFiles(false);
+            //List<string> PoNrs = getHnPOABackOrder(HnOrdRsp);
+            List<string> dummyList = new List<string> {
+		            "4842",
+		            "31332",
+		            "31346",
+		            "31351",
+		            "31400",
+		            "31401",
+		            "31402",
+		            "31399",
+		            "31393", 
+		            "31410", 
+		            "31408",
+		            "31409",
+		            "31413",
+		            "31417",
+		            "31420", 
+		            "31423", 
+		            "31430",
+		            "31437", 
+		            "195792",
+		            "116975",
+		            "78275",
+		            "31468",  
+		            "31514", 
+		            "31515", 
+		            "31516", 
+		            "31578",  
+		            "241928", 
+		            "23856",  
+		            "31601",  
+		            "31619",  
+		            "34154",  
+		            "31677",  
+		            "31679",  
+		            "31697",
+		            "196160", 
+		            "31711",
+		            "31722", 
+		            "31803", 
+		            "31807",  
+		            "53036",  
+		            "31887", 
+		            "31890", 
+		            "31889",  
+		            "100952", 
+		            "31893",  
+		            "31897",  
+		            "31906",  
+		            "31912",  
+		            "31918"  
+            };
+            getAnsOnBackOrderPO(dummyList);
+            //copyNextSegForTrx();
             //rmvTrailingSp(true);
-            getDiffernetFile(true);
+            //getDiffernetFile(true);
+            //copySegForTrx();
             //copyToFolder();
             //renameFiles();
-            //List<int> grps = new List<int> { 1,2,3,4,5 };
-            //rmvControlVariance(gxsMsgIdRmv, grps);
+            //string ZzUnzCtrlRmv = @".+?:ZZ\+(\d+:\d+\+)(\d+).*'UNZ\+\d+\+(\2).*";
             //rmvEdiFactControlVariance(sugarCtrlRmv);
             //getBoxNameProperty();
             //copySample();  
-            //getFailedFiles(false);
             //Hashtable tokens = new Hashtable();
             //tokens.Add("140707:", "'UNH");
             //rmvTmMsgIdVariance(tokens);
@@ -65,7 +136,6 @@ namespace countBox
         {
             var appSettings = ConfigurationManager.AppSettings;
             string InputDir = appSettings["SourceDir"];             
-            string OutputDir = appSettings["TargetDir"];            
 
             FileStream filestream = new FileStream(InputDir + "\\" + SampleFile, FileMode.Create);
             var streamwriter = new StreamWriter(filestream);
@@ -186,6 +256,76 @@ namespace countBox
             }
         }
 
+
+        private static void getAnsOnBackOrderPO(List<string> shippedPo)
+        {
+            var appSettings = ConfigurationManager.AppSettings;
+            string InputDir = appSettings["SourceDir"];
+            List<string> inFiles = new List<string>(Directory.GetFiles(InputDir));
+            FileStream filestream = new FileStream(InputDir + "\\" + "AsnBackOrder", FileMode.Create);
+            var streamwriter = new StreamWriter(filestream);
+            streamwriter.AutoFlush = true;
+            Console.SetOut(streamwriter);
+            Console.SetError(streamwriter);
+
+            foreach (var poNr in shippedPo)
+            {                
+                string AsnBackOrderPat = @".*UNH.*DESADV.*'BGM\+\d+\+" + poNr + @"\+\d+'DTM\+.*";
+
+                foreach (string fName in inFiles)
+                {
+                    string baseName = Path.GetFileName(fName);
+                    if ((baseName.IndexOf(SampleFile) != -1))
+                        continue;       // skip log file                
+
+                    string bodyStr = File.ReadAllText(fName);
+                    if (Regex.Match(bodyStr, AsnBackOrderPat).Success == true)
+                    {
+                        Console.WriteLine("{0} has back order ASN at PO {1}", fName, poNr);
+                    }
+                }
+            }
+        }
+        
+        private static List<string> getHnPOABackOrder(string pattern)
+        {
+            var appSettings = ConfigurationManager.AppSettings;
+            string InputDir = appSettings["SourceDir"];
+            List<string> inFiles = new List<string>(Directory.GetFiles(InputDir));
+            FileStream filestream = new FileStream(InputDir + "\\" + SampleFile, FileMode.Create);
+            var streamwriter = new StreamWriter(filestream);
+            streamwriter.AutoFlush = true;
+            Console.SetOut(streamwriter);
+            Console.SetError(streamwriter);
+
+            List<string> poaBackOrderNr = new List<string>();
+
+            foreach (string fName in inFiles)
+            {
+                string baseName = Path.GetFileName(fName);
+                if ((baseName.IndexOf(SampleFile) != -1))
+                    continue;       // skip log file
+
+                string bodyStr = File.ReadAllText(fName);               
+                if (Regex.Match(bodyStr, pattern).Success == false)
+                    continue;
+
+                Regex ItemRegex = new Regex(pattern, RegexOptions.Compiled);
+                foreach (Match ItemMatch in ItemRegex.Matches(bodyStr))
+                {
+                    string pocPoNr = "";
+                    for (int posIdx = 1; posIdx < ItemMatch.Groups.Count; posIdx++)
+                    {
+                        pocPoNr = bodyStr.Substring(ItemMatch.Groups[posIdx].Index, ItemMatch.Groups[posIdx].Length);
+                        poaBackOrderNr.Add(pocPoNr);
+                        Console.WriteLine("{0} has back order ASN at PO {1}", fName, pocPoNr);
+
+                    }
+                }
+            }
+
+            return (poaBackOrderNr);
+        }
         
         /// <summary>
         ///  remove the UNH control number variance from files before diff for translation result
@@ -206,8 +346,7 @@ namespace countBox
             foreach (string fName in inFiles)
             {
                 string baseName = Path.GetFileName(fName);
-                if ((baseName.IndexOf(SampleFile) != -1) ||
-                    (baseName.Contains("GXS") == false))
+                if ((baseName.IndexOf(SampleFile) != -1)) 
                     continue;       // skip log file
 
                 string bodyStr = File.ReadAllText(fName);
@@ -339,6 +478,46 @@ namespace countBox
                 }
             }
         }
+
+        private static void enumDifferences()
+        {
+            var appSettings = ConfigurationManager.AppSettings;
+            string InputDir = appSettings["SourceDir"];     // all files that had been output by one translatr and put into folder
+            string OutputDir = appSettings["TargetDir"];    // all files that had been output by another translatr and put into folder
+
+            FileStream filestream = new FileStream(InputDir + "\\" + SampleFile, FileMode.Create);
+            var streamwriter = new StreamWriter(filestream);
+            streamwriter.AutoFlush = true;
+            Console.SetOut(streamwriter);
+            Console.SetError(streamwriter);
+
+            string APath = InputDir + "\\foundDiff";
+            string OPath = OutputDir + "\\foundDiff";
+            if (!Directory.Exists(APath))
+                Directory.CreateDirectory(APath);
+            if (!Directory.Exists(OPath))
+                Directory.CreateDirectory(OPath);
+
+            DirectoryInfo inDir = new DirectoryInfo(InputDir);
+            DirectoryInfo outDir = new DirectoryInfo(OutputDir);
+
+            IEnumerable<FileInfo> inFileInfo = inDir.GetFiles("*.*", SearchOption.AllDirectories);
+            IEnumerable<FileInfo> outFileInfo = outDir.GetFiles("*.*", SearchOption.AllDirectories);
+            fileDirComp myDirComp = new fileDirComp();
+            
+            var notSameFileSet =
+                from aFile in inFileInfo
+                join bFile in outFileInfo on aFile.Name.ToLower() equals bFile.Name.ToLower()
+                where (aFile.Length != bFile.Length) || (fileDirComp.GetFileText(aFile.FullName) != fileDirComp.GetFileText(bFile.FullName))
+                select new { aDiffFile = aFile.FullName, aBase = aFile, bDiffFile = bFile.FullName, bBase = bFile };
+
+            foreach (var item in notSameFileSet)
+            {
+                File.Copy(item.aDiffFile, APath + @"\" + item.aBase, true);
+                File.Copy(item.bDiffFile, OPath + @"\" + item.bBase, true);
+            }
+        }
+
         /// <summary>
         /// compare input directory against output directory where translation result files are stored.
         /// only extract the date & messageID part of those files as unique file name before diff the file content
@@ -376,7 +555,7 @@ namespace countBox
                     Console.WriteLine("{0}", fullName);
                     if (goCopy)
                     {
-                        string fullPathFile = inFiles.Where(failed => (failed.Contains(aFile) == true)).First();
+                        string fullPathFile = inFiles.Where(failed => (failed.IndexOf(aFile, StringComparison.OrdinalIgnoreCase) != -1)).First();
                         string baseName = Path.GetFileName(fullPathFile);
                         string destFile = System.IO.Path.Combine(failedPath, baseName);
                         System.IO.File.Copy(fullPathFile, destFile, true);
@@ -410,7 +589,7 @@ namespace countBox
                 if (baseName[0] != '[')
                     baseName = "[" + baseName;      // compensate output file name that does not start with '['
 
-                string FileNrRmvPat = @"\[.+?\.xml\](\.*\d+)\.txt$";
+                string FileNrRmvPat = @"\[.+?\.xml\s*\](\.*\d+)\.txt$";
                 Match fileNrMatch = Regex.Match(baseName, FileNrRmvPat);
                 if (fileNrMatch.Success == false)
                 {
@@ -428,6 +607,99 @@ namespace countBox
             }
             return (resultList);
         }
+
+        /// <summary>
+        ///  copy files which has not been translated into a new dir
+        /// </summary>
+        private static void copyNextSegForTrx()
+        {
+            var appSettings = ConfigurationManager.AppSettings;
+            string InputDir = appSettings["SourceDir"];
+            string OutputDir = appSettings["TargetDir"];
+            int fixCount = 6000;        // copy 6000 for translation
+
+            string NewFileDir = InputDir + "\\NewForTrx";
+            Directory.CreateDirectory(NewFileDir);
+            List<string> avoidToCopy = new List<string>();
+            List<string> NewToTrx = new List<string>();
+
+            if (Directory.Exists(NewFileDir))
+                Directory.CreateDirectory(NewFileDir);
+
+            foreach (string file in Directory.EnumerateFiles(
+                    OutputDir, "*.*", SearchOption.AllDirectories))
+            {
+                if (file.IndexOf("SampleLog") != -1)
+                    continue;       // skip log file
+                string baseName = Path.GetFileName(file);
+
+                avoidToCopy.Add(baseName);
+            }
+
+            int addCnt = 0;
+            foreach (string file in Directory.EnumerateFiles(
+                    InputDir, "*.*", SearchOption.AllDirectories))
+            {
+                string baseName = Path.GetFileName(file);
+                if ((file.IndexOf("SampleLog") != -1) || (avoidToCopy.Contains(baseName)))
+                    continue;       // skip log file
+                NewToTrx.Add(baseName);
+
+                if (++addCnt == fixCount)
+                    break;
+            }
+            foreach (var item in NewToTrx)
+            {
+                string inF = InputDir + "\\" + item;
+                string outF = NewFileDir + "\\" + item;
+
+                Console.WriteLine("New file to be copied for trx {0}", outF);
+                System.IO.File.Copy(inF, outF, true);
+            }
+        }
+
+        private static void copySegForTrx()
+        {
+            var appSettings = ConfigurationManager.AppSettings;
+            string InputDir = appSettings["SourceDir"];
+            string OutputDir = appSettings["TargetDir"];
+            int fixCount = 3000;        // copy 3000 for translation
+
+            FileStream filestream = new FileStream(InputDir + "\\SampleLog.txt", FileMode.Create);
+            var streamwriter = new StreamWriter(filestream);
+            streamwriter.AutoFlush = true;
+            Console.SetOut(streamwriter);
+            Console.SetError(streamwriter);
+
+            //string mixMatchDir = InputDir + "\\bracAdded";
+            //Directory.CreateDirectory(mixMatchDir);
+            List<string> allFilesToCopy = new List<string>();
+
+            foreach (string file in Directory.EnumerateFiles(
+                    InputDir, "*.*", SearchOption.AllDirectories))
+            {
+                if ((file.IndexOf("SampleLog") != -1) || (allFilesToCopy.Contains(file)))
+                    continue;       // skip log file
+                allFilesToCopy.Add(file);
+                Console.WriteLine("Raw file to be translated {0}", file);
+            }
+
+            int totalCnt = 0;
+            foreach (var item in allFilesToCopy)
+            {
+                string baseName = Path.GetFileName(item);
+
+                File.Copy(item, OutputDir + "\\" + baseName, true);
+                ++totalCnt;
+                if (totalCnt >= fixCount)
+                    break;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Total count of copied files {0}", totalCnt);
+            Console.WriteLine();
+        }
+
 
         private static void renameFiles()
         {
@@ -646,7 +918,7 @@ namespace countBox
         // compare. A return value of 0 indicates that the contents of the files
         // are the same. A return value of any other value indicates that the 
         // files are not the same.
-        private static bool FileCompare(string file1, string file2)
+        public static bool FileCompare(string file1, string file2)
         {
             int file1byte;
             int file2byte;
@@ -654,11 +926,11 @@ namespace countBox
             FileStream fs2;
 
             // Determine if the same file was referenced two times.
-            if (file1 == file2)
-            {
-                // Return true to indicate that the files are the same.
-                return true;
-            }
+            //if (file1 == file2)
+            //{
+            //    // Return true to indicate that the files are the same.
+            //    return true;
+            //}
 
             // Open the two files.
             fs1 = new FileStream(file1, FileMode.Open);
@@ -695,6 +967,35 @@ namespace countBox
             // equal to "file2byte" at this point only if the files are 
             // the same.
             return ((file1byte - file2byte) == 0);
+        }
+    }
+
+    public class fileDirComp : IEqualityComparer<FileInfo>
+    {
+        // Read the contents of the file. 
+        public static string GetFileText(string name)
+        {
+            string fileContents = String.Empty;
+
+            // If the file has been deleted since we took  
+            // the snapshot, ignore it and return the empty string. 
+            if (System.IO.File.Exists(name))
+            {
+                fileContents = System.IO.File.ReadAllText(name);
+            }
+            return fileContents;
+        }
+
+        public bool Equals(FileInfo x, FileInfo y)
+        {
+            if ((x.Name != y.Name) || (x.Length != y.Length))
+                return false;
+            return true;
+        }
+
+        public int GetHashCode(FileInfo obj)
+        {
+            throw new NotImplementedException();
         }
     }
 }
