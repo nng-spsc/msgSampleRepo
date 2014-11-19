@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2012 edited by Nick
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "msgSampling", "msgSampling\msgSampling.csproj", "{1EF4FA16-ACBF-4A4A-B8C5-28737D7DFD0E}"
 EndProject
 Global
